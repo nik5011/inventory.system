@@ -2,3 +2,9 @@ tesseract-ocr
 tesseract-ocr-chi-sim
 poppler-utils
 libmagic1
+zlib1g-dev
+libjpeg-dev
+libpng-dev
+libtiff-dev
+libfreetype6-dev
+liblcms2-dev 
