@@ -1,1 +1,4 @@
-
+tesseract-ocr
+tesseract-ocr-chi-sim
+poppler-utils
+libmagic1
