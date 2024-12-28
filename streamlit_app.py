@@ -247,4 +247,4 @@ if st.session_state.products:
         
         st.divider()
 else:
-    st.info('暫無產品數據')
+    st.info('暫無產品數據') 
