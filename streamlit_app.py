@@ -2,17 +2,11 @@ import streamlit as st
 import pandas as pd
 import os
 from PIL import Image
-import pytesseract
-import pdfplumber
-from opencc import OpenCC
 import io
 import json
 
 # 配置页面
 st.set_page_config(page_title="庫存管理系統", layout="wide")
-
-# 配置繁体转换器
-cc = OpenCC('s2t')
 
 # 初始化会话状态
 if 'products' not in st.session_state:
@@ -27,38 +21,6 @@ def save_products():
     with open('products.json', 'w', encoding='utf-8') as f:
         json.dump(st.session_state.products, f, ensure_ascii=False, indent=2)
 
-def extract_text_from_image(image):
-    """从图片中提取文本"""
-    try:
-        # 转换为RGB模式（如果是RGBA）
-        if image.mode == 'RGBA':
-            image = image.convert('RGB')
-        # 调整图像大小以提高OCR准确性
-        width, height = image.size
-        if width > 2000 or height > 2000:
-            ratio = min(2000/width, 2000/height)
-            image = image.resize((int(width*ratio), int(height*ratio)), Image.Resampling.LANCZOS)
-        text = pytesseract.image_to_string(image, lang='chi_sim')
-        return text.strip()
-    except Exception as e:
-        st.error(f'圖片處理錯誤: {str(e)}')
-        return None
-
-def process_pdf_file(pdf_file):
-    """处理PDF文件"""
-    try:
-        product_names = []
-        with pdfplumber.open(pdf_file) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text()
-                if text:
-                    lines = [line.strip() for line in text.split('\n') if line.strip()]
-                    product_names.extend(lines)
-        return product_names
-    except Exception as e:
-        st.error(f'PDF處理錯誤: {str(e)}')
-        return []
-
 # 标题
 st.title('庫存管理系統')
 
@@ -66,29 +28,14 @@ st.title('庫存管理系統')
 st.header('添加新產品')
 uploaded_file = st.file_uploader(
     "選擇文件上傳",
-    type=['txt', 'xlsx', 'pdf', 'jpg', 'jpeg', 'png'],
-    help="支持的文件類型：TXT（每行一個產品）、Excel（第一列為產品名稱）、PDF、圖片"
+    type=['txt', 'xlsx'],
+    help="支持的文件類型：TXT（每行一個產品）、Excel（第一列為產品名稱）"
 )
 
 if uploaded_file is not None:
     try:
         file_type = uploaded_file.type
-        if file_type.startswith('image'):
-            # 处理图片
-            image = Image.open(uploaded_file)
-            product_name = extract_text_from_image(image)
-            if product_name:
-                new_product = {
-                    'name': product_name,
-                    'warehouse_quantity': 0,
-                    'store_quantity': 0,
-                    'notes': ''
-                }
-                st.session_state.products.append(new_product)
-                save_products()
-                st.success('產品添加成功！')
-        
-        elif file_type == 'text/plain':
+        if file_type == 'text/plain':
             # 处理文本文件
             content = uploaded_file.getvalue().decode('utf-8')
             lines = [line.strip() for line in content.split('\n') if line.strip()]
@@ -103,20 +50,6 @@ if uploaded_file is not None:
             save_products()
             st.success(f'成功添加 {len(lines)} 個產品！')
         
-        elif file_type == 'application/pdf':
-            # 处理PDF文件
-            product_names = process_pdf_file(uploaded_file)
-            for name in product_names:
-                new_product = {
-                    'name': name,
-                    'warehouse_quantity': 0,
-                    'store_quantity': 0,
-                    'notes': ''
-                }
-                st.session_state.products.append(new_product)
-            save_products()
-            st.success(f'成功添加 {len(product_names)} 個產品！')
-        
         elif file_type.startswith('application/vnd.openxmlformats-officedocument.spreadsheetml') or \
              file_type.startswith('application/vnd.ms-excel'):
             # 处理Excel文件
@@ -125,7 +58,7 @@ if uploaded_file is not None:
                 names = df.iloc[:, 0].dropna().tolist()
                 for name in names:
                     new_product = {
-                        'name': name,
+                        'name': str(name),
                         'warehouse_quantity': 0,
                         'store_quantity': 0,
                         'notes': ''
@@ -143,40 +76,23 @@ search_term = st.text_input('搜索產品', key='search')
 # 导出按钮
 col1, col2 = st.columns([1, 5])
 with col1:
-    export_format = st.selectbox('導出格式', ['Excel', 'TXT'])
-    if st.button('導出數據'):
+    if st.button('導出Excel'):
         try:
-            if export_format == 'Excel':
-                output = io.BytesIO()
-                df = pd.DataFrame([{
-                    '產品名稱': cc.convert(p['name']),
-                    '倉庫數量': p['warehouse_quantity'],
-                    '店面數量': p['store_quantity'],
-                    '總數量': p['warehouse_quantity'] + p['store_quantity'],
-                    '備註': cc.convert(p['notes'])
-                } for p in st.session_state.products])
-                df.to_excel(output, index=False)
-                st.download_button(
-                    label='下載Excel文件',
-                    data=output.getvalue(),
-                    file_name='inventory.xlsx',
-                    mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                )
-            else:
-                output = io.StringIO()
-                for p in st.session_state.products:
-                    output.write(f"產品名稱: {cc.convert(p['name'])}\n")
-                    output.write(f"倉庫數量: {p['warehouse_quantity']}\n")
-                    output.write(f"店面數量: {p['store_quantity']}\n")
-                    output.write(f"總數量: {p['warehouse_quantity'] + p['store_quantity']}\n")
-                    output.write(f"備註: {cc.convert(p['notes'])}\n")
-                    output.write("-" * 50 + "\n")
-                st.download_button(
-                    label='下載文本文件',
-                    data=output.getvalue(),
-                    file_name='inventory.txt',
-                    mime='text/plain'
-                )
+            output = io.BytesIO()
+            df = pd.DataFrame([{
+                '產品名稱': p['name'],
+                '倉庫數量': p['warehouse_quantity'],
+                '店面數量': p['store_quantity'],
+                '總數量': p['warehouse_quantity'] + p['store_quantity'],
+                '備註': p['notes']
+            } for p in st.session_state.products])
+            df.to_excel(output, index=False)
+            st.download_button(
+                label='下載Excel文件',
+                data=output.getvalue(),
+                file_name='inventory.xlsx',
+                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            )
         except Exception as e:
             st.error(f'導出錯誤: {str(e)}')
 
@@ -201,7 +117,7 @@ if st.session_state.products:
         col1, col2, col3, col4, col5, col6 = st.columns([3, 2, 2, 2, 3, 1])
         
         with col1:
-            st.text(cc.convert(product['name']))
+            st.text(product['name'])
         
         with col2:
             new_warehouse = st.number_input(
@@ -246,4 +162,4 @@ if st.session_state.products:
         
         st.divider()
 else:
-    st.info('暫無產品數據') 
+    st.info('暫無產品數據')
