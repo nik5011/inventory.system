@@ -11,6 +11,11 @@ st.set_page_config(page_title="庫存管理系統", layout="wide")
 if 'products' not in st.session_state:
     st.session_state.products = []
     st.session_state.next_id = 1
+    st.session_state.search = ""
+
+def on_search_change():
+    """當搜索內容改變時觸發"""
+    st.session_state.search = st.session_state.search_input
 
 def add_product(name, warehouse_qty=0, store_qty=0, notes=""):
     """添加新產品"""
@@ -77,8 +82,13 @@ def main():
             else:
                 st.error('Excel文件必須包含name列')
     
-    # 搜索框
-    search = st.text_input('搜索產品')
+    # 搜索框 - 使用on_change實現即時搜索
+    st.text_input(
+        '搜索產品',
+        key='search_input',
+        value=st.session_state.search,
+        on_change=on_search_change
+    )
     
     # 導出按鈕
     col1, col2 = st.columns([1, 5])
@@ -129,7 +139,7 @@ def main():
     # 顯示產品列表
     if st.session_state.products:
         # 排序產品
-        sorted_products = sort_products(st.session_state.products, search)
+        sorted_products = sort_products(st.session_state.products, st.session_state.search)
         
         # 創建產品表格
         for product in sorted_products:
